@@ -1,0 +1,102 @@
+---- HELP ----
+Command List:
+-------------
+
+  Text Manipulation:
+  ------------------
+  (.)a          Adds text after the addressed line (append)
+
+  (.,.)c        Delete lines and insert replacement (change)
+
+  (.,.)d        Delete lines (delete)
+
+  (.,+1)j       Concatenate lines into a single line (join)
+
+  (.)i          Insert text before the addressed line (insert)
+
+  (.,.)m(.)     Delets text from adress range and inserts after line (move)
+
+  (.,.)t(.)     Copies text from address range and inserts after line (copy)
+
+  Clipboard:
+  ----------
+  (.,.)y        Copies range to clipboard (yank)
+
+  (.)x          Inserts text from clipboard after line (put)
+
+  Printing and Movement:
+  ----------------------
+  (.,.)p        Prints range of lines (print)
+
+  (.,.)n        Prints range of lines with line numbers (numbered)
+
+  (.,.)l        Prints lines with all special characters escaped and `$' end of
+                line (list)
+
+  (+1)z<count>  Scrolls `count' lines. If no count supplied scrolls the same as
+                last time (scroll)
+
+  (.)           Jumps to addressed line (jump)
+
+  ($)=          Prints the line addressed. If none supplied, then prints the
+                line number of end of file (line)
+
+  k<name>       Sets a mark at current location. Name is a single lower case
+                letter
+
+  File Access:
+  ------------
+  e <filename>          Reads file to buffer (edit). A single warning is given
+                        if buffer is dirty
+
+  E <filename>          Reads file to buffer unconditionally
+
+  (1,$)w <filename>     Writes range of buffer to file
+
+  (1,$)wq <filename>    Writes range of buffer to file and quits
+
+  (1,$)W <filename>     Writes range of buffer to the end of file
+
+  q                     Quits unless buffer is dirty
+
+  Q                     Quits unconditionally
+
+  f <filename>          Sets default file name. If none given, prints default
+
+ (.)r <filename>        Reads file and inserts content after addressed line
+
+  Help:
+  -----
+  h     Prints the last error message
+
+  H     Toggles if error is printed when it occurs
+
+
+Line Addressing:
+----------------
+  Addressing can be single position or ranges, separated by a comma
+
+  Single Positions:
+  -----------------
+  .     Current Position
+
+  $     End of File
+
+  1     Absolute line number
+
+  -1 +3 Relative line number to current position
+
+  'a    Mark location
+
+  /re/  Search for match in lower lines. Will wrap if none found
+
+  ?re?  Search for match in upper lines. Will wrap if none found
+
+       Note that search uses perl's PCRE regular expressions
+
+  Special Addresses:
+  ------------------
+  % or ,        Entire document. Similar to `1,$'
+
+  ;             Current line to end of document. Simialr to `.,$'
+---- END OF HELP ----

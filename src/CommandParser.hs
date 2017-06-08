@@ -14,6 +14,8 @@ import Text.Parsec ( (<|>) )
 import Text.Parsec.Combinator ( many1
                               , choice
                               , optionMaybe
+                              , optional
+                              , eof
                               )
 import Text.Parsec.Char ( char
                         , oneOf
@@ -223,7 +225,7 @@ appendCommand = do
   _ <- whiteSpace
   _ <- char 'a'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "append" r NoArgs
 
 -- |change: (.,.)c
@@ -237,7 +239,7 @@ changeCommand = do
   _ <- whiteSpace
   _ <- char 'c'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "change" r NoArgs
 
 -- |delete: (.,.)d
@@ -251,7 +253,7 @@ deleteCommand = do
   _ <- whiteSpace
   _ <- char 'd'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "delete" r NoArgs
 
 -- |edit: e <filename>
@@ -259,13 +261,21 @@ deleteCommand = do
 -- Range: None
 -- Args: filename
 editCommand :: Parser ParsedCommand
-editCommand = do
-  _ <- whiteSpace
-  _ <- char 'e'
-  _ <- many (char ' ')
-  filename <- many $ noneOf "\n"
-  _ <- endOfLine
-  (return . ParsedCommand "edit" NoRange) . StringArg $ pack filename
+editCommand = choice [try withFileName, try withoutFileName]
+  where
+    withFileName = do
+      _ <- whiteSpace
+      _ <- char 'e'
+      _ <- many1 (char ' ')
+      filename <- many1 $ noneOf "\n"
+      _ <- eof
+      (return . ParsedCommand "edit" NoRange) . StringArg $ pack filename
+    withoutFileName = do
+      _ <- whiteSpace
+      _ <- char 'e'
+      _ <- whiteSpace
+      _ <- eof
+      (return . ParsedCommand "edit" NoRange) . StringArg $ pack ""
 
 -- |edit unconditional: E <filename>
 -- Same as 'e' but does not warn if unsaved
@@ -277,7 +287,7 @@ editUncondCommand = do
   _ <- char 'E'
   _ <- many1 (char ' ')
   filename <- many1 $ noneOf "\n"
-  _ <- endOfLine
+  _ <- eof
   (return . ParsedCommand "editUncond" NoRange) . StringArg $ pack filename
 
 -- |default filename: f <filename>
@@ -285,16 +295,22 @@ editUncondCommand = do
 -- Range: none
 -- Args: filename
 defaultFileCommand :: Parser ParsedCommand
-defaultFileCommand = do
-  _ <- whiteSpace
-  _ <- char 'f'
-  _ <- many (char ' ')
-  filename <- many $ noneOf "\n "
-  _ <- whiteSpace
-  _ <- endOfLine
-  return . ParsedCommand "defaultFile" NoRange $ (if not (null filename)
-                                                 then StringArg $ pack filename
-                                                 else NoArgs)
+defaultFileCommand = choice [try withFileName, try withoutFileName]
+  where
+    withFileName = do
+      _ <- whiteSpace
+      _ <- char 'f'
+      _ <- many1 (char ' ')
+      filename <- many1 $ noneOf "\n "
+      _ <- whiteSpace
+      _ <- eof
+      (return . ParsedCommand "defaultFile" NoRange) . StringArg $ pack filename
+    withoutFileName = do
+      _ <- whiteSpace
+      _ <- char 'f'
+      _ <- whiteSpace
+      _ <- eof
+      return $ ParsedCommand "defaultFile" NoRange  NoArgs
 
 -- |(1,$)g/re/cmd
 -- global command
@@ -309,7 +325,7 @@ globalCommand = do
   _ <- char 'g'
   re <- forwardRegEx
   cmd <- many1 $ noneOf "\n"
-  _ <- endOfLine
+  _ <- eof
   return . ParsedCommand "global" r $ RegExArg re (pack cmd)
 
 -- |(1,$)G/re/ -- Interactive
@@ -325,7 +341,7 @@ globalInteractiveCommand = do
   _ <- char 'G'
   re <- forwardRegEx
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return . ParsedCommand "globalInteractive" r $ RegExArg re ""
 
 -- |help: h
@@ -337,7 +353,7 @@ helpCommand = do
   _ <- whiteSpace
   _ <- char 'h'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "help" NoRange NoArgs
 
 -- |toggle help: H
@@ -349,7 +365,7 @@ toggleHelpCommand = do
   _ <- whiteSpace
   _ <- char 'H'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "toggleHelp" NoRange NoArgs
 
 -- |(.)i
@@ -363,7 +379,7 @@ insertCommand = do
   _ <- whiteSpace
   _ <- char 'i'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "insert" r NoArgs
 
 -- |(.,.+1)j
@@ -377,7 +393,7 @@ joinCommand = do
   _ <- whiteSpace
   _ <- char 'j'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "join" r NoArgs
 
 -- |(.)kx
@@ -392,7 +408,7 @@ markCommand = do
   _ <- char 'k'
   lbl <- letter
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   (return . ParsedCommand "mark" r) . StringArg $ singleton lbl
 
 -- |(.,.)l
@@ -406,7 +422,7 @@ listCommand = do
   _ <- whiteSpace
   _ <- char 'l'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "list" r NoArgs
 
 -- |(.,.)m(.) -- Move
@@ -424,7 +440,7 @@ moveCommand = do
   mRange' <- optionMaybe singleRange
   let r' = orCurrent mRange'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return . ParsedCommand "move" r $ RangeArg r'
 
 
@@ -439,7 +455,7 @@ numberedCommand = do
   _ <- whiteSpace
   _ <- char 'n'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "numbered" r NoArgs
 
 -- |(.,.)p -- Print lines
@@ -450,7 +466,7 @@ printCommand = do
   _ <- whiteSpace
   _ <- char 'p'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "print" r NoArgs
 
 -- |P
@@ -462,7 +478,7 @@ togglePromptCommand = do
   _ <- whiteSpace
   _ <- char 'P'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "togglePrompt" NoRange NoArgs
 
 -- |quit: q
@@ -473,7 +489,7 @@ quitCommand = do
   _ <- whiteSpace
   _ <- char 'q'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "quit" NoRange NoArgs
 
 -- |quit unconditional: Q
@@ -484,7 +500,7 @@ quitUncondCommand = do
   _ <- whiteSpace
   _ <- char 'Q'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "quitUncond" NoRange NoArgs
 
 -- |read file: ($)r <file>
@@ -499,7 +515,7 @@ readCommand = do
   _ <- char 'r'
   _ <- many1 (char ' ') -- Must have at least one space
   filename <- many1 $ noneOf "\n"
-  _ <- endOfLine
+  _ <- eof
   (return . ParsedCommand "read" r) . StringArg $ pack filename
 
 -- |(.,.)s/re/replace
@@ -511,12 +527,12 @@ swapCommand = do
   mRange <- optionMaybe allRanges
   let r = orCurrent mRange
   _ <- whiteSpace
-  _ <- string "s/"
-  re <- many1 $ noneOf "/\n"
-  _ <- char '/'
-  replace <- many1 $ noneOf "\n"
-  _ <- endOfLine
-  return . ParsedCommand "swap" r $ RegExArg (pack re) (pack replace)
+  _ <- char 's'
+  re <- forwardRegEx
+  replace <- many1 $ noneOf "/\n"
+  _ <- optional $ char '/'
+  _ <- eof
+  return . ParsedCommand "swap" r $ RegExArg re (pack replace)
 
 
 -- |(.,.)s -- replace last match
@@ -530,7 +546,7 @@ swapLastCommand = do
   _ <- whiteSpace
   _ <- char 's'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "swapLast" r NoArgs
 
 -- |(.,.)t(.) -- copies
@@ -547,7 +563,7 @@ copyCommand = do
   mRange' <- optionMaybe singleRange
   let r' = orCurrent mRange'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return . ParsedCommand "copy" r $ RangeArg r'
 
 -- |undo last command: u
@@ -558,7 +574,7 @@ undoCommand = do
   _ <- whiteSpace
   _ <- char 'u'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "undo" NoRange NoArgs
 
 -- |(1,$)v/re/cmd
@@ -574,10 +590,10 @@ reverseGlobalCommand = do
   _ <- char 'v'
   re <- forwardRegEx
   cmd <- many1 $ noneOf "\n"
-  _ <- endOfLine
+  _ <- eof
   return . ParsedCommand "reverseGlobal" r $ RegExArg re (pack cmd)
 
--- |(1,$)V/re/ 
+-- |(1,$)V/re/
 -- same as G only for non-match
 -- Range: None
 -- Args: None
@@ -590,7 +606,7 @@ reverseGlobalInteractiveCommand = do
   _ <- char 'V'
   re <- forwardRegEx
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return . ParsedCommand "reverseGlobalInteractive" r $ RegExArg re ""
 
 -- |(1,$)w <file>
@@ -598,32 +614,53 @@ reverseGlobalInteractiveCommand = do
 -- Range: N,S,M
 -- Args: Filename
 writeCommand :: Parser ParsedCommand
-writeCommand = do
-  _ <- whiteSpace
-  mRange <- optionMaybe allRanges
-  let r = justOr (DoubleRange (AbsolutePosition 1) EndOfDoc) mRange
-  _ <- whiteSpace
-  _ <- char 'w'
-  _ <- many (char ' ')
-  filename <- many $ noneOf "\n"
-  _ <- endOfLine
-  (return . ParsedCommand "write" r) . StringArg $ pack filename
-
+writeCommand = choice [try withFileName , try withoutFileName]
+  where
+    withFileName = do
+      _ <- whiteSpace
+      mRange <- optionMaybe allRanges
+      let r = justOr (DoubleRange (AbsolutePosition 1) EndOfDoc) mRange
+      _ <- whiteSpace
+      _ <- char 'w'
+      _ <- many1 $ char ' '
+      filename <-  many1 $ noneOf "\n"
+      _ <- eof
+      (return . ParsedCommand "write" r) . StringArg $ pack filename
+    withoutFileName = do
+      _ <- whiteSpace
+      mRange <- optionMaybe allRanges
+      let r = justOr (DoubleRange (AbsolutePosition 1) EndOfDoc) mRange
+      _ <- whiteSpace
+      _ <- char 'w'
+      _ <- whiteSpace
+      _ <- eof
+      (return . ParsedCommand "write" r) . StringArg $ pack ""
 
 -- |(1,$)wq <file> -- write addresses to file and quit
 -- Range: None
 -- Args: None
 writeQuitCommand :: Parser ParsedCommand
-writeQuitCommand = do
-  _ <- whiteSpace
-  mRange <- optionMaybe allRanges
-  let r = justOr (DoubleRange (AbsolutePosition 1) EndOfDoc) mRange
-  _ <- whiteSpace
-  _ <- string "wq"
-  _ <- many1 (char ' ') -- Must have at least one space
-  filename <- many1 $ noneOf "\n"
-  _ <- endOfLine
-  (return . ParsedCommand "writeQuit" r) . StringArg $ pack filename
+writeQuitCommand = choice [try withFileName, try withoutFileName]
+  where
+    withFileName = do
+      _ <- whiteSpace
+      mRange <- optionMaybe allRanges
+      let r = justOr (DoubleRange (AbsolutePosition 1) EndOfDoc) mRange
+      _ <- whiteSpace
+      _ <- string "wq"
+      _ <- many1 $ char ' '
+      filename <-  many1 $ noneOf "\n"
+      _ <- eof
+      (return . ParsedCommand "writeQuit" r) . StringArg $ pack filename
+    withoutFileName = do
+      _ <- whiteSpace
+      mRange <- optionMaybe allRanges
+      let r = justOr (DoubleRange (AbsolutePosition 1) EndOfDoc) mRange
+      _ <- whiteSpace
+      _ <- string "wq"
+      _ <- whiteSpace
+      _ <- eof
+      (return . ParsedCommand "writeQuit" r) . StringArg $ pack ""
 
 -- |(1,$)W <file> -- write addresses to end of file
 -- Range: NSM
@@ -635,9 +672,9 @@ appendFileCommand = do
   let r = justOr (DoubleRange (AbsolutePosition 1) EndOfDoc) mRange
   _ <- whiteSpace
   _ <- char 'W'
-  _ <- many (char ' ')
+  _ <- many1 (char ' ')
   filename <- many $ noneOf "\n"
-  _ <- endOfLine
+  _ <- eof
   (return . ParsedCommand "appendFile" r) . StringArg $ pack filename
 
 -- |(.)x -- Copies (puts) contents to address
@@ -650,7 +687,7 @@ putsCommand = do
   _ <- whiteSpace
   _ <- char 'x'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "puts" r NoArgs
 
 -- |(.,.)y -- Copies (yank) contents from address
@@ -664,7 +701,7 @@ yankCommand = do
   _ <- whiteSpace
   _ <- char 'y'
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "yank" r NoArgs
 
 -- |(.+1)zn
@@ -678,10 +715,12 @@ scrollCommand = do
   let r = justOr (SingleRange $ RelativePosition Plus 1) mRange
   _ <- whiteSpace
   _ <- char 'z'
-  count <- many1 digit
+  count <- many digit
   _ <- whiteSpace
-  _ <- endOfLine
-  return . ParsedCommand "scroll" r $ NumberArg (read count :: Int)
+  _ <- eof
+  if null count
+  then return . ParsedCommand "scroll" r $ NoArgs
+  else return . ParsedCommand "scroll" r $ NumberArg (read count :: Int)
 
 -- !command
 --
@@ -690,7 +729,7 @@ bangCommand = do
   _ <- whiteSpace
   _ <- char '!'
   cmd <- many1 $ noneOf "\n"
-  _ <- endOfLine
+  _ <- eof
   (return . ParsedCommand "bang" NoRange) . StringArg $ pack cmd
 
 -- |(.,.)#
@@ -702,7 +741,7 @@ commentCommand = do
   _ <- whiteSpace
   _ <- char '#'
   comment <- many $ noneOf "\n"
-  _ <- endOfLine
+  _ <- eof
   (return . ParsedCommand "comment" r) . StringArg $ pack comment
 
 -- |($)=
@@ -714,7 +753,7 @@ lineNumberCommand = do
   _ <- whiteSpace
   _ <- char '='
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "lineNumber" r NoArgs
 
 -- |(.+1)<newline>
@@ -724,8 +763,18 @@ jumpCommand = do
   mRange <- optionMaybe singleRange
   let r = justOr NoRange mRange
   _ <- whiteSpace
-  _ <- endOfLine
+  _ <- eof
   return $ ParsedCommand "jump" r NoArgs
+
+-- |Command List
+-- Example: ?
+commandListCommand :: Parser ParsedCommand
+commandListCommand = do
+  _ <- whiteSpace
+  char '?'
+  _ <- whiteSpace
+  _ <- eof
+  return $ ParsedCommand "commandList" NoRange NoArgs
 
 -- |parse commands
 parseCommand :: Parser ParsedCommand
@@ -756,8 +805,8 @@ parseCommand = choice [ try appendCommand
                       , try undoCommand
                       , try reverseGlobalCommand
                       , try reverseGlobalInteractiveCommand
-                      , try writeCommand
                       , try writeQuitCommand
+                      , try writeCommand
                       , try appendFileCommand
                       , try putsCommand
                       , try yankCommand
@@ -766,6 +815,7 @@ parseCommand = choice [ try appendCommand
                       , try commentCommand
                       , try lineNumberCommand
                       , try jumpCommand
+                      , try commandListCommand
                       ]
 
 doParseCommand = parse parseCommand ""

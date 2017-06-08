@@ -5,12 +5,16 @@ module Runner (runEditor) where
 
 import Commands
 import CommandParser
+import RegEx
+import Resources
 
 import Control.Applicative ((<$>))
 import Control.Exception (catch, IOException(..))
 import Control.Monad
 import Control.Monad.State
+import qualified Data.ByteString.Char8 as Char8
 import Data.List (intercalate, find)
+import Data.Maybe (fromMaybe)
 import qualified Data.Text as T
 import Data.Text.IO (readFile, writeFile)
 import qualified Data.Vector as V
@@ -36,6 +40,8 @@ initialState = StateInfo
                   False -- displayHelp
                   V.empty -- marks
                   "" -- lastSearch
+                  "" -- lastReplace
+                  22 -- lastScroll (default is 22)
                   -- Temporary Data
                   V.empty -- tBuffer
                   (-1) -- tFromStart
@@ -62,7 +68,7 @@ commandMode = do
   ((when (showPrompt st) . lift) . putStr) . T.unpack $ prompt st
   lift $ hFlush stdout
   cmd <- lift getLine
-  let parsedCmd = doParseCommand (T.pack $ cmd ++ "\n")
+  let parsedCmd = doParseCommand (T.pack  cmd)
   case parsedCmd of
     Right (ParsedCommand cmdString r a) ->
       case parseActions actions cmdString r a of
@@ -129,8 +135,8 @@ actions = V.fromList [ appendAction
                      , quitAction
                      , quitUnconditionalAction
                      , readAction
-                     -- , swapAction
-                     -- , swapLastAction
+                     , swapAction
+                     , swapLastAction
                      , copyAction
                      -- , undoAction
                      -- , reverseGlobalAction
@@ -145,6 +151,7 @@ actions = V.fromList [ appendAction
                      , commentAction
                      , lineNumberAction
                      , jumpAction
+                     , commandListAction
                      ]
 
 -- |appendAction inserts text after the addressed line
@@ -559,7 +566,60 @@ readAction =
         rangeToPos _ = NoPosition
 
 -- |swapAction
+swapAction =
+  Command  "swap" $ \r a ->
+    Invocation swapAction r a $ do
+        st <- get
+        let results = setFromRangeM r st
+                        >>= setToRangeM (Just r)
+                        >>= fixToRangeM
+                        >>= sliceContentsM
+                        >>= swapContentsM (getRegExArgument a)
+                        >>= removeContentsM
+                        >>= insertTextM
+                        >>= setPositionToToM
+        case results of
+          Left st' -> do
+            printError st'
+            put (clearTemps st')
+          Right st' -> put (clearTemps st')
+        commandMode
+      where
+        nextSearch fst snd = if T.null fst then snd else fst
+        swapContentsM Nothing st = Left st { lastError = "Not a Regular Expression" }
+        swapContentsM (Just (re,replace)) st = do
+          let re' = nextSearch re (lastSearch st)
+          let swap = swapGen (T.unpack re') (T.unpack replace)
+          let updated = V.map (\ln -> (T.pack . swap) $ T.unpack ln) (tBuffer st)
+          Right st { tBuffer = updated
+                   , lastSearch = re'
+                   , lastReplace = replace
+                   }
+
 -- |swapLastAction
+swapLastAction =
+  Command "swapLast" $ \r a ->
+    Invocation swapLastAction r a $ do
+        st <- get
+        let results = setFromRangeM r st
+                        >>= setToRangeM (Just r)
+                        >>= fixToRangeM
+                        >>= sliceContentsM
+                        >>= swapContentsLastM
+                        >>= removeContentsM
+                        >>= insertTextM
+                        >>= setPositionToToM
+        case results of
+          Left st' -> do
+            printError st'
+            put (clearTemps st')
+          Right st' -> put (clearTemps st')
+        commandMode
+      where
+        swapContentsLastM st = do
+          let swap = swapGen (T.unpack $ lastSearch st) (T.unpack $ lastReplace st)
+          let updated = V.map (\ln -> (T.pack . swap) $ T.unpack ln) (tBuffer st)
+          Right st { tBuffer = updated }
 
 -- |copyAction copies from addressed location to destination
 copyAction =
@@ -628,11 +688,34 @@ writeQuitAction =
     Invocation writeQuitAction r a $ do
       st <- get
       let StringArg path = a
-      let path' = T.unpack path
-      let con = sliceContents st r
-      if V.null con
+      let path' = case (T.unpack path, fileName st) of
+                    ("", "") -> ""
+                    ("", x) -> x
+                    (x, _ ) -> x
+      if not (null path')
       then do
-        let newSt = st { lastError = "Invalid address" }
+        let con = sliceContents st r
+        if V.null con
+        then do
+          let newSt = st { lastError = "Invalid address" }
+          put newSt
+          let err = if displayHelp newSt
+                    then  (T.unpack . lastError $ newSt) ++ "\n?"
+                    else "?"
+          lift $ putStrLn  err
+          lift $ hFlush stdout
+          commandMode
+        else do
+          let lns = T.append (T.intercalate "\n" $ V.toList con) "\n"
+          lift $ writeFile path' lns
+          let newSt = st { dirty = False
+                        , dirtyWarning = False
+                        }
+          put newSt
+          (lift . print) $ T.length lns
+          return ()
+      else do
+        let newSt = st { lastError = "No current filename" }
         put newSt
         let err = if displayHelp newSt
                   then  (T.unpack . lastError $ newSt) ++ "\n?"
@@ -640,15 +723,6 @@ writeQuitAction =
         lift $ putStrLn  err
         lift $ hFlush stdout
         commandMode
-      else do
-        let lns = T.append (T.intercalate "\n" $ V.toList con) "\n"
-        lift $ writeFile path' lns
-        let newSt = st { dirty = False
-                       , dirtyWarning = False
-                       }
-        put newSt
-        (lift . print) $ T.length lns
-        return ()
 
 -- |appendFileAction appends address range to the end of a file
 appendFileAction =
@@ -747,11 +821,11 @@ scrollAction =
             put . clearTemps $ st' { position = tFromEnd st' }
         commandMode
       where
-        setScrollLength Nothing st = Right st { tFromEnd = tFromStart st + 22 }
+        setScrollLength Nothing st = Right st { tFromEnd = tFromStart st + (lastScroll st) }
         setScrollLength (Just n) st =
           if n < 1
-          then Right st { tFromEnd = tFromStart st + n }
-          else Right st { tFromEnd = tFromStart st + (n - 1) }
+          then Right st { tFromEnd = tFromStart st + 1, lastScroll = 1 }
+          else Right st { tFromEnd = tFromStart st + (n - 1), lastScroll = (n - 1) }
 
 -- |bangAction
 bangAction =
@@ -811,6 +885,22 @@ jumpAction =
         jumpRangeConvert (DoubleRange _ _) st = Left st { lastError = "Invalid address" }
         jumpRangeConvert singleRange st = setFromRangeM singleRange st
 
+-- |commandListAction prints out the entire command list
+commandListAction =
+  Command "commandList" $ \r a ->
+    Invocation commandListAction r a $ do
+      st <- get
+      case getResource "help.txt" of
+        Just cont -> do
+          lift $ Char8.putStrLn cont
+          lift $ hFlush stdout
+        Nothing -> do
+          let newSt = st { lastError = "No help found" }
+          put newSt
+          printError newSt
+      commandMode
+
+
 -- |Helpers
 
 -- |clearTemps resets all temp variables from state info
@@ -862,9 +952,10 @@ matchList v re = V.map mapFn $ V.filter filterFn (V.indexed v)
     mapFn :: (Int, T.Text) -> Int
     mapFn (idx, _) = (idx+1) -- position starts at 1
     filterFn :: (Int, T.Text) -> Bool
-    filterFn (_,txt) = case (T.unpack txt) =~~ re of
-                        Just x -> x
-                        Nothing -> False
+    filterFn (_,txt) = fromMaybe False ((T.unpack txt) =~~ re)
+--    filterFn (_,txt) = case (T.unpack txt) =~~ re of
+--                        Just x -> x
+--                        Nothing -> False
     idxVec = V.indexed v
 
 findNext :: Int -> V.Vector Int -> Int
@@ -1019,6 +1110,10 @@ getRangeArgument _ = Nothing
 -- |getNumberArgument returns on number args
 getNumberArgument (NumberArg n) = Just n
 getNumberArgument _ = Nothing
+
+-- |getRegExArgument returns a RegEx arg
+getRegExArgument (RegExArg re replace) = Just (re, replace)
+getRegExArgument _ = Nothing
 
 -- |sliceContentsM copies the From range to the temp buffer
 -- This returns Either StateInfo StateInfo assigning error message on failure

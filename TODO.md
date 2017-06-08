@@ -1,8 +1,10 @@
 # TODO
 
+## Parser
+- Return better error codes
+
 ## Runner
 - Update marks on insert/delete
-- Add swap support
 - Add undo support
 - Add read bang support
 

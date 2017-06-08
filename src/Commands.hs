@@ -59,6 +59,8 @@ data StateInfo = StateInfo
   , displayHelp :: Bool
   , marks :: V.Vector (Char, Int)
   , lastSearch :: T.Text
+  , lastReplace :: T.Text
+  , lastScroll :: Int
   -- Temporary Data
   , tBuffer :: V.Vector T.Text
   , tFromStart :: Int

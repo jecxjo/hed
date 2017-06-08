@@ -6,5 +6,5 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 ## Unversioned
 ### Added
 - Command Parser
-- Command Execution: insert, manipulation, regex searching
+- Command Execution: insert, manipulation, regex searching, regex swapping (using PCRE)
 - Initial unit testing and linting

@@ -47,6 +47,9 @@ Supported Commands:
 - Comment: `(.,.)# <comment text>`
 - Line Number: `(.)=`
 - Jump: `(.)`
+- Swap: `(.,.)s/regex/replace/`
+- Swap Last: `(.,.)s`
+- Command List: `?`
 
 ## Arguments
 

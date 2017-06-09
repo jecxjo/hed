@@ -36,6 +36,9 @@ Command List:
   (+1)z<count>  Scrolls `count' lines. If no count supplied scrolls the same as
                 last time (scroll)
 
+  (+1)Z<count>  Scrolls `count' lines, printing line numbers. If no count is
+                supplied the same as last time (scrollNumbered)
+
   (.)           Jumps to addressed line (jump)
 
   ($)=          Prints the line addressed. If none supplied, then prints the

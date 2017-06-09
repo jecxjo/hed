@@ -123,10 +123,11 @@ insertMode = do
             printError errState
             put (clearTemps errState)
           Right newState ->
-            put (clearTemps newState { position = position newState + V.length (tBuffer newState)
-                                      , dirty = True
-                                      , dirtyWarning = False
-                                      })
+            (put . clearTemps) $
+                newState { position = position newState + V.length (tBuffer newState)
+                         , dirty = True
+                         , dirtyWarning = False
+                         }
         commandMode
     x -> do
       put st { tBuffer = V.snoc (tBuffer st) (T.pack x) }
@@ -355,7 +356,6 @@ helpAction =
     Invocation helpAction r a $ do
       st <- get
       lift $ (putStrLn . T.unpack) (lastError st)
-      -- lift $ print st
       lift $ hFlush stdout
       commandMode
 
@@ -1081,16 +1081,24 @@ removeContentsM st
     | startPos == 0 = Right st { contents = V.drop endPos con
                                , dirty = True
                                , dirtyWarning = False
+                               , marks = newMarks
                                }
     | otherwise = Right st { contents = V.take (startPos-1) con V.++ V.drop endPos con
                            , dirty = True
                            , dirtyWarning = False
+                           , marks = newMarks
                            }
   where
       con = contents st
       startPos = tFromStart st
       endPos = tFromEnd st
       toStart = tToStart st
+      cnt = endPos - startPos
+      shiftMarks = V.map (\(mrk,num) -> if num >= endPos
+                                        then (mrk,num - cnt - 1)
+                                        else (mrk,num))
+      delMarks = V.filter (\(_,num) -> (num < startPos) || (num >= endPos))
+      newMarks = (shiftMarks . delMarks) $ marks st
 
 -- |shiftToByFromM shifts the To addresses by the range of the From addresses
 -- This returns Either StateInfo StateInfo assigning error message on failure
@@ -1217,11 +1225,22 @@ sliceContentsM st
 insertTextM st =
   case (tToStart st, tBuffer st) of
     (-1, _) -> Left st { lastError = "Invalid address" }
-    (0, con) -> Right st { contents = con V.++ contents st }
-    (idx, con) -> Right st { contents = l V.++ con V.++ r }
+    (0, con) -> Right st { contents = con V.++ contents st
+                         , marks = newMarks
+                         }
+    (idx, con) -> Right st { contents = l V.++ con V.++ r
+                           , marks = newMarks
+                           }
                     where oldCon = contents st
                           l = V.take idx oldCon
                           r = V.drop idx oldCon
+  where
+    idx = tToStart st
+    cnt = V.length $ tBuffer st
+    newMarks = V.map (\(mrk,num) -> if num >= idx
+                                    then (mrk,num + cnt)
+                                    else (mrk,num))
+                     (marks st)
 
 -- |insertText inserts text into contents
 insertText :: StateInfo -> Int -> V.Vector T.Text -> V.Vector T.Text

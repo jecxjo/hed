@@ -971,7 +971,7 @@ commandListAction =
       let resName = justOr "help" (getStringArgument a)
       case getResource ((T.unpack resName) ++  ".txt") of
         Just cont -> do
-          lift $ Char8.putStrLn cont
+          (lift . printTerm . V.fromList . map (T.pack . Char8.unpack)) $ Char8.lines cont
           lift $ hFlush stdout
         Nothing -> do
           let newSt = st { lastError = "No help found" }
@@ -1253,7 +1253,7 @@ insertText st idx con = l V.++ con V.++ r
 -- |printBuff prints the temp buffer to stdout
 printBuff :: StateInfo -> IO ()
 printBuff st = do
-  V.mapM_ (putStrLn . T.unpack) (tBuffer st)
+  printTerm (tBuffer st)
   hFlush stdout
 
 -- |fixFromRangeM moves the From range for insert rather than append

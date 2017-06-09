@@ -10,3 +10,4 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 - Initial unit testing and linting
 - Load file at startup
 - Added a bunch of help (commands, regex)
+- Terminal aware printing

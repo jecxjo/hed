@@ -105,7 +105,7 @@ commandMode = do
           put newSt
           commandMode
     Left e -> do
-      let newSt = st { lastError = T.append "Unknown Command: " (T.pack $ show e) }
+      let newSt = st { lastError = T.append "Unknown Command: " (T.pack e) }
       printError newSt
       put newSt
       commandMode

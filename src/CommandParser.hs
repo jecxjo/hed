@@ -141,6 +141,7 @@ markLocation = do
 -- |allRanges: . 1,$ -4,+2 ' ;
 allRanges :: Parser Range
 allRanges = choice [ try doubleRange, singleRange, specialDoublePosition ]
+               <|> unexpected "Unknown Range"
 
 parseRange :: Parser Range
 parseRange = allRanges
@@ -833,5 +834,8 @@ parseCommand = choice [ try appendCommand
                       , try jumpCommand
                       , try commandListCommand
                       ]
+               <|> unexpected "Unknown Command"
 
-doParseCommand = parse parseCommand ""
+doParseCommand txt = case parse parseCommand "" txt of
+                        Left e -> (Left . E.messageString . head) $ E.errorMessages e
+                        Right cmd -> Right cmd

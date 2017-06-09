@@ -8,6 +8,8 @@ module CommandParser
   , doParseCommand
   ) where
 
+import Utils
+
 import Data.Text (pack, singleton, replace, Text(..), concatMap)
 import Text.Read (readMaybe)
 import Text.Parsec ( (<|>) )
@@ -45,17 +47,10 @@ data ParsedCommand = ParsedCommand
   }
   deriving (Show, Eq)
 
-
--- |Utilities
-justOr :: a -> Maybe a -> a
-justOr _ (Just x) = x
-justOr fault Nothing = fault
-
-orCurrent = justOr (SingleRange CurrentPosition)
-
 -- |
 -- | Misc
 -- |
+orCurrent = justOr (SingleRange CurrentPosition)
 
 -- |Parse and toss whitespace
 whiteSpace :: Parser ()
@@ -722,6 +717,23 @@ scrollCommand = do
   then return . ParsedCommand "scroll" r $ NoArgs
   else return . ParsedCommand "scroll" r $ NumberArg (read count :: Int)
 
+-- |scrolls n lines, numbered, at a time at address line
+-- Range: NS
+-- Args: Count
+scrollNumberedCommand :: Parser ParsedCommand
+scrollNumberedCommand = do
+  _ <- whiteSpace
+  mRange <- optionMaybe singleRange
+  let r = justOr (SingleRange $ RelativePosition Plus 1) mRange
+  _ <- whiteSpace
+  _ <- char 'Z'
+  count <- many digit
+  _ <- whiteSpace
+  _ <- eof
+  if null count
+  then return . ParsedCommand "scrollNumbered" r $ NoArgs
+  else return . ParsedCommand "scrollNumbered" r $ NumberArg (read count :: Int)
+
 -- !command
 --
 bangCommand :: Parser ParsedCommand
@@ -773,8 +785,11 @@ commandListCommand = do
   _ <- whiteSpace
   char '?'
   _ <- whiteSpace
+  term <- many $ noneOf "\n"
   _ <- eof
-  return $ ParsedCommand "commandList" NoRange NoArgs
+  if null term
+  then return $ ParsedCommand "commandList" NoRange NoArgs
+  else return $ ParsedCommand "commandList" NoRange (StringArg $ pack term)
 
 -- |parse commands
 parseCommand :: Parser ParsedCommand
@@ -812,6 +827,7 @@ parseCommand = choice [ try appendCommand
                       , try yankCommand
                       , try bangCommand
                       , try scrollCommand
+                      , try scrollNumberedCommand
                       , try commentCommand
                       , try lineNumberCommand
                       , try jumpCommand

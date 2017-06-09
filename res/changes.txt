@@ -1,0 +1,2 @@
+0.0.0 - 2017-06-09
+ - Initial beta build supporting most ed commands

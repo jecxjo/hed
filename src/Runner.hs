@@ -7,6 +7,7 @@ import Commands
 import CommandParser
 import RegEx
 import Resources
+import Utils
 
 import Control.Applicative ((<$>))
 import Control.Exception (catch, IOException(..))
@@ -42,6 +43,7 @@ initialState = StateInfo
                   "" -- lastSearch
                   "" -- lastReplace
                   22 -- lastScroll (default is 22)
+                  V.empty -- undoBuffer
                   -- Temporary Data
                   V.empty -- tBuffer
                   (-1) -- tFromStart
@@ -60,6 +62,30 @@ data Invocation = Invocation
   , args :: Args
   , exec :: CommandState
   }
+
+-- |runEditor is the "main"
+runEditor :: Maybe FilePath -> IO ()
+runEditor optPath = do
+  let startCmd = case optPath of
+                    Nothing -> Nothing
+                    Just path -> Just $ ParsedCommand "edit" NoRange (StringArg $ T.pack path)
+  _ <- execStateT (startMode startCmd) initialState
+  return ()
+
+-- |startMode handles the first optional commands
+startMode :: Maybe ParsedCommand -> CommandState
+startMode optCmd = do
+  st <- get
+  case optCmd of
+    Just (ParsedCommand cmdString r a) ->
+      case parseActions actions cmdString r a of
+        Just i -> exec i
+        Nothing -> do
+          let newSt = st { lastError = T.append "Unknown Command: " cmdString }
+          printError newSt
+          put newSt
+          commandMode
+    Nothing -> commandMode
 
 -- |Command Mode handles all commands
 commandMode :: CommandState
@@ -93,14 +119,14 @@ insertMode = do
     "." -> do
         let results = insertTextM st
         case results of
-          Left st' -> do
-            printError st'
-            put (clearTemps st')
-          Right st' ->
-            put (clearTemps st' { position = position st' + V.length (tBuffer st')
-                                , dirty = True
-                                , dirtyWarning = False
-                                })
+          Left errState -> do
+            printError errState
+            put (clearTemps errState)
+          Right newState ->
+            put (clearTemps newState { position = position newState + V.length (tBuffer newState)
+                                      , dirty = True
+                                      , dirtyWarning = False
+                                      })
         commandMode
     x -> do
       put st { tBuffer = V.snoc (tBuffer st) (T.pack x) }
@@ -138,7 +164,7 @@ actions = V.fromList [ appendAction
                      , swapAction
                      , swapLastAction
                      , copyAction
-                     -- , undoAction
+                     , undoAction
                      -- , reverseGlobalAction
                      -- , reverseGlobalInteractiveAction
                      , writeAction
@@ -147,6 +173,7 @@ actions = V.fromList [ appendAction
                      , putsAction
                      , yankAction
                      , scrollAction
+                     , scrollNumberedAction
                      , bangAction
                      , commentAction
                      , lineNumberAction
@@ -162,12 +189,12 @@ appendAction =
       let results = setToRangeM (Just r) st
                       >>= setPositionToToM
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
           commandMode
-        Right st' -> do
-          put st'
+        Right newState -> do
+          put  newState { undoBuffer = (contents st) }
           insertMode
 
 -- |changeAction delets the addressed lines and then inserts 
@@ -181,12 +208,12 @@ changeAction =
                         >>= removeContentsM
                         >>= setPositionToToM
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
           commandMode
-        Right st' -> do
-          put st'
+        Right newState -> do
+          put newState { undoBuffer = (contents st) }
           insertMode
 
 -- |deleteAction deletes addressed lines
@@ -199,10 +226,11 @@ deleteAction =
                       >>= fixFromRangeM
                       >>= setPositionToFromM
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
-        Right st' -> put (clearTemps st')
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
+        Right newState ->
+          (put . clearTemps) $ newState { undoBuffer = (contents st) }
       commandMode
 
 -- |editAction opens a file and replaces the current buffer
@@ -243,12 +271,14 @@ editAction =
               lns <- lift $ readFile path'
               let textLines = V.fromList $ T.lines lns
               let newSt = st { contents = textLines
-                            , fileName = path'
-                            , dirty = False
-                            , dirtyWarning = False
-                            , position = 0
-                            , lastError = T.empty
-                            }
+                             , fileName = path'
+                             , dirty = False
+                             , dirtyWarning = False
+                             , position = 0
+                             , lastError = T.empty
+                             , undoBuffer = textLines
+                             , marks = V.empty
+                             }
               put newSt
               (lift . print) $ T.length lns
             else do
@@ -279,6 +309,8 @@ editUnconditionalAction =
                        , dirtyWarning = False
                        , position = 0
                        , lastError = T.empty
+                       , undoBuffer = textLines
+                       , marks = V.empty
                        }
         put newSt
         (lift . print) $ T.length lns
@@ -323,7 +355,7 @@ helpAction =
     Invocation helpAction r a $ do
       st <- get
       lift $ (putStrLn . T.unpack) (lastError st)
-      lift $ print st
+      -- lift $ print st
       lift $ hFlush stdout
       commandMode
 
@@ -345,12 +377,12 @@ insertAction =
                       >>= fixToRangeM
                       >>= setPositionToToM
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
           commandMode
-        Right st' -> do
-          put st'
+        Right newState -> do
+          put newState { undoBuffer = (contents st) }
           insertMode
 
 -- |joinAction joines the text on addressed lines to a single line
@@ -366,10 +398,11 @@ joinAction =
                       >>= joinBuffer
                       >>= insertTextM
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
-        Right st' -> put (clearTemps st')
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
+        Right newState ->
+          (put . clearTemps) $ newState { undoBuffer = (contents st) }
       commandMode
     where
       fixJoinRange st =
@@ -387,10 +420,10 @@ markAction =
                         >>= removeMark (getStringArgument a)
                         >>= addMark (getStringArgument a)
         case results of
-          Left st' -> do
-            printError st'
-            put (clearTemps st')
-          Right st' -> put (clearTemps st')
+          Left errState -> do
+            printError errState
+            put (clearTemps errState)
+          Right newState -> put (clearTemps newState)
         commandMode
       where
         removeMark Nothing st = Left st { lastError = "Invalid address" }
@@ -411,12 +444,12 @@ listAction =
                         >>= sliceContentsM
                         >>= convertLines
         case results of
-          Left st' -> do
-            printError st'
-            put (clearTemps st')
-          Right st' -> do
-            lift $ printBuff st'
-            put (clearTemps st')
+          Left errState -> do
+            printError errState
+            put (clearTemps errState)
+          Right newState -> do
+            lift $ printBuff newState
+            put (clearTemps newState)
         commandMode
       where
         convertLines st = Right st { tBuffer = V.map (\l -> T.append (convert l) "$") (tBuffer st) }
@@ -440,10 +473,11 @@ moveAction =
                       >>= insertTextM
                       >>= setPositionToToM
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
-        Right st' -> put (clearTemps st')
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
+        Right newState ->
+          (put . clearTemps) $ newState { undoBuffer = (contents st) }
       commandMode
 
 -- |numberedAction prints addressed lines with numbers
@@ -455,12 +489,13 @@ numberedAction =
                         >>= sliceContentsM
                         >>= numberBuff
         case results of
-          Left st' -> do
-            printError st'
-            put (clearTemps st')
-          Right st -> do
-            lift $ printBuff st
-            put (clearTemps st)
+          Left errState -> do
+            printError errState
+            lift $ print st
+            put (clearTemps errState)
+          Right newState -> do
+            lift $ printBuff newState
+            put (clearTemps newState)
         commandMode
       where
         numberBuff st =
@@ -478,12 +513,12 @@ printAction =
       let results = setFromRangeM r st
                       >>= sliceContentsM
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
-        Right st -> do
-          lift $ printBuff st
-          put (clearTemps st)
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
+        Right newState -> do
+          lift $ printBuff newState
+          put (clearTemps newState)
       commandMode
 
 -- |togglePromptAction toggles if prompt is shown when in Insert Mode
@@ -501,9 +536,9 @@ quitAction =
       st <- get
       let result = checkDirtyM st
       case result of
-        Left st' -> do
-          printError st'
-          put st'
+        Left errState -> do
+          printError errState
+          put errState
           commandMode
         Right _ -> return ()
 
@@ -550,6 +585,7 @@ readAction =
                 let newSt = st { contents = newContent
                                 , dirty = True
                                 , dirtyWarning = False
+                                , undoBuffer = (contents st)
                                 }
                 put newSt
           else do
@@ -579,10 +615,11 @@ swapAction =
                         >>= insertTextM
                         >>= setPositionToToM
         case results of
-          Left st' -> do
-            printError st'
-            put (clearTemps st')
-          Right st' -> put (clearTemps st')
+          Left errState -> do
+            printError errState
+            put (clearTemps errState)
+          Right newState ->
+            (put . clearTemps) $ newState { undoBuffer = (contents st) }
         commandMode
       where
         nextSearch fst snd = if T.null fst then snd else fst
@@ -610,10 +647,11 @@ swapLastAction =
                         >>= insertTextM
                         >>= setPositionToToM
         case results of
-          Left st' -> do
-            printError st'
-            put (clearTemps st')
-          Right st' -> put (clearTemps st')
+          Left errState -> do
+            printError errState
+            put (clearTemps errState)
+          Right newState ->
+            (put . clearTemps) $ newState { undoBuffer = (contents st) }
         commandMode
       where
         swapContentsLastM st = do
@@ -632,13 +670,23 @@ copyAction =
                       >>= insertTextM
                       >>= setPositionToToM
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
-        Right st' -> put (clearTemps st')
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
+        Right newState ->
+          (put . clearTemps) $ newState { undoBuffer = contents st }
       commandMode
 
 -- |undoAction
+undoAction =
+  Command "undo" $ \r a ->
+    Invocation undoAction r a $ do
+      st <- get
+      put st { contents = (undoBuffer st)
+             , undoBuffer = (contents st)
+             }
+      commandMode
+
 -- |reverseGlobalAction
 -- |reverseGlobalInteractiveAction
 
@@ -665,7 +713,7 @@ writeAction =
           lift $ putStrLn  err
           lift $ hFlush stdout
         else do
-          let lns = T.append (T.intercalate "\n" $ V.toList con) "\n"
+          let lns =  T.unlines $ V.toList con
           lift $ writeFile path' lns
           let newSt = st { dirty = False
                         , dirtyWarning = False
@@ -775,11 +823,11 @@ putsAction =
                         >>= moveClipboardToBuffer
                         >>= insertTextM
         case results of
-          Left st' -> do
-            printError st'
-            put (clearTemps st')
-          Right st' ->
-            put (clearTemps st')
+          Left errState -> do
+            printError errState
+            put (clearTemps errState)
+          Right newState ->
+            (put . clearTemps) $ newState { undoBuffer = contents st }
         commandMode
       where
         checkClipboard st =
@@ -797,11 +845,11 @@ yankAction =
       let results = setFromRangeM r st
                       >>= sliceContentsM
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
-        Right st' ->
-          put . clearTemps $ st' { clipboard = tBuffer st' }
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
+        Right newState ->
+          put . clearTemps $ newState { clipboard = tBuffer newState }
       commandMode
 
 -- |scrollAction prints N lines and moves position
@@ -813,12 +861,12 @@ scrollAction =
                         >>= setScrollLength (getNumberArgument a)
                         >>= sliceContentsM
         case results of
-          Left st' -> do
-            printError st'
-            put (clearTemps st')
-          Right st' -> do
-            lift $ printBuff st'
-            put . clearTemps $ st' { position = tFromEnd st' }
+          Left errState -> do
+            printError errState
+            put (clearTemps errState)
+          Right newState -> do
+            lift $ printBuff newState
+            put . clearTemps $ newState { position = tFromEnd newState }
         commandMode
       where
         setScrollLength Nothing st = Right st { tFromEnd = tFromStart st + (lastScroll st) }
@@ -826,6 +874,36 @@ scrollAction =
           if n < 1
           then Right st { tFromEnd = tFromStart st + 1, lastScroll = 1 }
           else Right st { tFromEnd = tFromStart st + (n - 1), lastScroll = (n - 1) }
+
+-- |scrollNumberedAction prints N numbered lines and moves position
+scrollNumberedAction =
+  Command "scrollNumbered" $ \r a ->
+    Invocation scrollNumberedAction r a $ do
+        st <- get
+        let results = setFromRangeM r st
+                        >>= setScrollLength (getNumberArgument a)
+                        >>= sliceContentsM
+                        >>= numberBuff
+        case results of
+          Left errState -> do
+            printError errState
+            put (clearTemps errState)
+          Right newState -> do
+            lift $ printBuff newState
+            put . clearTemps $ newState { position = tFromEnd newState }
+        commandMode
+      where
+        setScrollLength Nothing st = Right st { tFromEnd = tFromStart st + (lastScroll st) }
+        setScrollLength (Just n) st =
+          if n < 1
+          then Right st { tFromEnd = tFromStart st + 1, lastScroll = 1 }
+          else Right st { tFromEnd = tFromStart st + (n - 1), lastScroll = (n - 1) }
+        numberBuff st =
+          Right st { tBuffer =
+            V.map (\(i,t) -> T.append
+                              (T.pack (show (i + tFromStart st) ++ "\t"))
+                              t)
+                  (V.indexed (tBuffer st)) }
 
 -- |bangAction
 bangAction =
@@ -854,13 +932,13 @@ lineNumberAction =
       st <- get
       let results = setFromRangeM r st
       case results of
-        Left st' -> do
-          printError st'
-          put (clearTemps st')
-        Right st' -> do
-          lift $ print (tFromStart st')
+        Left errState -> do
+          printError errState
+          put (clearTemps errState)
+        Right newState -> do
+          lift $ print (tFromStart newState)
           lift $ hFlush stdout
-          put (clearTemps st')
+          put (clearTemps newState)
       commandMode
 
 -- |jumpAction jump to addressed location or next line
@@ -873,12 +951,12 @@ jumpAction =
                         >>= setPositionToFromM
 
         case results of
-          Left st' -> do
-            printError st'
-            put (clearTemps st')
-          Right st' -> do
-            lift $ printBuff st'
-            put $ clearTemps st'
+          Left errState -> do
+            printError errState
+            put (clearTemps errState)
+          Right newState -> do
+            lift $ printBuff newState
+            put $ clearTemps newState
         commandMode
       where
         jumpRangeConvert NoRange st = setFromRangeM (SingleRange $ RelativePosition Plus 1) st
@@ -890,7 +968,8 @@ commandListAction =
   Command "commandList" $ \r a ->
     Invocation commandListAction r a $ do
       st <- get
-      case getResource "help.txt" of
+      let resName = justOr "help" (getStringArgument a)
+      case getResource ((T.unpack resName) ++  ".txt") of
         Just cont -> do
           lift $ Char8.putStrLn cont
           lift $ hFlush stdout
@@ -1029,12 +1108,6 @@ shiftToByFromM st
     fromEnd = tFromEnd st
     fromWidth = fromEnd - fromStart
 
--- |runEditor is the "main"
-runEditor :: IO ()
-runEditor = do
-  _ <- execStateT commandMode initialState
-  return ()
-
 -- |printError prints the last error message and the "?"
 printError st = do
   let err = if displayHelp st
@@ -1063,7 +1136,7 @@ setFromRangeM (DoubleRange start end) st =
   case (getPosition st start, getPosition st end) of
     (-1,_) -> Left st { lastError = "Invalid address" }
     (_,-1) -> Left st { lastError = "Invalid address" }
-    (x,y) -> if x < y
+    (x,y) -> if x <= y
              then Right st { tFromStart = x, tFromEnd = y }
              else Left st { lastError = "Invalid address" }
 

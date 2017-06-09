@@ -1,0 +1,111 @@
+---- REGEX ----
+hed allows you to searh as well as 'find and replace' text using Regular
+Expressions. hed uses the Pearl Compatible Regular Expression, with the
+following lists of search tokens.
+
+To search for "foo", in Command mode type
+
+:/foo/
+
+To search for "foo" or "bar" enter
+
+:/foo|bar/
+
+To do the same search again
+
+://
+
+Regular Expression Basics
+-------------------------
+  .       Any character except newline
+  a       The character a
+  ab      The string ab
+  a|b     a or b
+  a*      0 or more a's
+  \       Escapes a special character
+
+Regular Expression Quantifiers
+------------------------------
+  *       0 or more
+  +       1 or more
+  ?       0 or 1
+  {2      Exactly 2
+  {2, 5}  Between 2 and 5
+  {2,}    2 or more
+
+Regular Expression Groups
+-------------------------
+  (...)       Capturing group
+  (?:...)     Non-capturing group
+  (?>...)     Atomic group
+  (?|...)     Duplicate group numbers
+  \Y          Match the Y'th captured group
+  (?R)        Recurse into entire pattern
+  (?Y)        Recurse into numbered group Y
+  \g{Y}       Match the numbered group Y
+  \g<Y>       Recurse into numbered group Y
+
+Regular Expression Character Classes
+------------------------------------
+  [ab-d]      One character of: a, b, c, d
+  [^ab-d]     One character except: a, b, c, d
+  [\b]        Backspace character
+  \d          One digit
+  \D          One non-digit
+  \s          One whitespace
+  \S          One non-whitespace
+  \w          One word character
+  \W          One non-word character
+
+Regular Expression Assertions
+-----------------------------
+  ^           Start of string
+  \A          Start of string, ignores m flag
+  $           End of string
+  \Z          End of string, ignores m flag
+  \b          Word boundary
+  \B          Non-word boundary
+  \G          Start of match
+  (?=...)     Positive lookahead
+  (?!...)     Negative lookahead
+  (?<=...)    Positive lookbehind
+  (?<!...)    Negative lookbehind
+  (?()|)      Conditional
+
+Regular Expression Escapes
+--------------------------
+  \Q..\E      Remove special meaning
+
+Regular Expression Flags
+------------------------
+  i           Ignore case
+  m           ^ and $ match start and end of line
+  U           Ungreedy quantifiers
+  (?imU)   Set flags within regex
+
+Regular Expression Special Characters
+-------------------------------------
+  \t          Tab
+  \YYY        Octal character YYY
+  \xYY        Hexadecimal character YY
+  \x{YY}      Hexadecimeal character YY
+  \cY         Control character Y
+
+Regular Expression Posix Classes
+--------------------------------
+  [:alnum:]   Letters and digits
+  [:alpha:]   Letters
+  [:ascii:]   Ascii codes 0 - 127
+  [:blank:]   Space or tab only
+  [:cntrl:]   Control characters
+  [:digit:]   Decimal digits
+  [:graph:]   Visible characters, except space
+  [:lower:]   Lowercase letters
+  [:print:]   Visible characters
+  [:punct:]   Visible punctuation characters
+  [:space:]   Whitespace
+  [:upper:]   Uppercase letters
+  [:word:]    Word characters
+  [:xdigit:]  Hexadecimal digits`
+
+---- END OF REGEX ----

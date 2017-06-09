@@ -1,0 +1,9 @@
+---- VERSION ----
+hed: an ed(itor) clone written in haskell.
+
+Version: 0.0.0
+
+Project Site: https://github.com/jecxjo/hed
+
+Related Topics: ? license ? changelog ? todo
+---- END OF VERSION ----

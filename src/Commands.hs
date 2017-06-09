@@ -61,6 +61,7 @@ data StateInfo = StateInfo
   , lastSearch :: T.Text
   , lastReplace :: T.Text
   , lastScroll :: Int
+  , undoBuffer :: V.Vector T.Text
   -- Temporary Data
   , tBuffer :: V.Vector T.Text
   , tFromStart :: Int

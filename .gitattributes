@@ -1,0 +1,11 @@
+# Sets the default behavior
+* text=auto
+
+# Set the defaults for specific file types
+*.hs text
+*.txt text
+*.cabal text
+*.yaml text
+*.hint text
+*.md text
+LICENSE text

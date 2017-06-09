@@ -1,102 +1,41 @@
 ---- HELP ----
-Command List:
--------------
+hed: a ed(itor) clone.
 
-  Text Manipulation:
-  ------------------
-  (.)a          Adds text after the addressed line (append)
+If you know how to use ed, or ex or vi you probably already know most of the
+commands for hed. If you are new to the modal line editors then here is a
+crash course.
 
-  (.,.)c        Delete lines and insert replacement (change)
+A modal editor is an editor that has multiple modes of operation. Unlike
+editors like Notepad or nano, which are always about typing text, a modal
+editor allows you to generate text, as well as manipulate it.
 
-  (.,.)d        Delete lines (delete)
+When hed starts you enter Command Mode. This is recognizable by the starting
+prompt
 
-  (.,+1)j       Concatenate lines into a single line (join)
+:
 
-  (.)i          Insert text before the addressed line (insert)
+From Command Mode you can type out a command to read and write files, cut,
+paste and delete lines and do regular expression "find and replace"
+operations.
 
-  (.,.)m(.)     Delets text from adress range and inserts after line (move)
+The other mode in hed is Insert Mode. This is when you can type out text. To
+enter Insert Mode from Command Mode press "i" and Enter. To exit Insert Mode
+just press . and Enter.
 
-  (.,.)t(.)     Copies text from address range and inserts after line (copy)
+:i
+This is a text file
+It was created using hed.
+.
+:%n
+1       This is a text file
+2       It was created using hed.
+:Q
 
-  Clipboard:
-  ----------
-  (.,.)y        Copies range to clipboard (yank)
+To learn about all the commands, use the documentation command and lookup
+commands.
 
-  (.)x          Inserts text from clipboard after line (put)
+:? commands
 
-  Printing and Movement:
-  ----------------------
-  (.,.)p        Prints range of lines (print)
-
-  (.,.)n        Prints range of lines with line numbers (numbered)
-
-  (.,.)l        Prints lines with all special characters escaped and `$' end of
-                line (list)
-
-  (+1)z<count>  Scrolls `count' lines. If no count supplied scrolls the same as
-                last time (scroll)
-
-  (.)           Jumps to addressed line (jump)
-
-  ($)=          Prints the line addressed. If none supplied, then prints the
-                line number of end of file (line)
-
-  k<name>       Sets a mark at current location. Name is a single lower case
-                letter
-
-  File Access:
-  ------------
-  e <filename>          Reads file to buffer (edit). A single warning is given
-                        if buffer is dirty
-
-  E <filename>          Reads file to buffer unconditionally
-
-  (1,$)w <filename>     Writes range of buffer to file
-
-  (1,$)wq <filename>    Writes range of buffer to file and quits
-
-  (1,$)W <filename>     Writes range of buffer to the end of file
-
-  q                     Quits unless buffer is dirty
-
-  Q                     Quits unconditionally
-
-  f <filename>          Sets default file name. If none given, prints default
-
- (.)r <filename>        Reads file and inserts content after addressed line
-
-  Help:
-  -----
-  h     Prints the last error message
-
-  H     Toggles if error is printed when it occurs
-
-
-Line Addressing:
-----------------
-  Addressing can be single position or ranges, separated by a comma
-
-  Single Positions:
-  -----------------
-  .     Current Position
-
-  $     End of File
-
-  1     Absolute line number
-
-  -1 +3 Relative line number to current position
-
-  'a    Mark location
-
-  /re/  Search for match in lower lines. Will wrap if none found
-
-  ?re?  Search for match in upper lines. Will wrap if none found
-
-       Note that search uses perl's PCRE regular expressions
-
-  Special Addresses:
-  ------------------
-  % or ,        Entire document. Similar to `1,$'
-
-  ;             Current line to end of document. Simialr to `.,$'
+Version information can be found at ? version or checkout the project website
+on github.
 ---- END OF HELP ----

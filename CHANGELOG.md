@@ -8,3 +8,5 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/).
 - Command Parser
 - Command Execution: insert, manipulation, regex searching, regex swapping (using PCRE)
 - Initial unit testing and linting
+- Load file at startup
+- Added a bunch of help (commands, regex)
